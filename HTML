@@ -1,0 +1,62 @@
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hot Wheels Racing Game</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- Title Screen -->
+  <div id="titleScreen" class="screen">
+    <h1 class="animated-title">🔥 HOT WHEELS RACING 🔥</h1>
+    <button id="playBtn">Start Game</button>
+    <button id="multiplayerBtn">Multiplayer</button>
+    <button id="settingsBtn">Settings</button>
+  </div>
+
+  <!-- Settings Screen -->
+  <div id="settingsScreen" class="screen hidden">
+    <h2>Settings</h2>
+    <label><input type="checkbox" id="musicToggle" checked /> Background Music</label><br />
+    <label><input type="checkbox" id="sfxToggle" checked /> Sound Effects</label><br />
+    <button id="backToMenuBtn">Back</button>
+  </div>
+
+  <!-- Game Container -->
+  <div id="gameContainer" class="hidden">
+    <div id="hud">
+      <div>Score: <span id="score">0</span></div>
+      <div>High Score: <span id="highScore">0</span></div>
+      <div>Nitro: <progress id="nitroBar" max="100" value="100"></progress></div>
+      <div>Shield: <span id="shieldStatus">OFF</span></div>
+      <div id="muteToggle" style="cursor:pointer;">🔊</div>
+    </div>
+    <canvas id="gameCanvas" width="400" height="600"></canvas>
+    <div id="countdown"></div>
+
+    <!-- Game Over Screen -->
+    <div id="gameOver" class="hidden">
+      <h2>Game Over!</h2>
+      <p>Your Score: <span id="finalScore"></span></p>
+      <button id="restartBtn" type="button">Restart</button>
+      <button id="menuBtn" type="button">Menu</button>
+    </div>
+  </div>
+
+  <!-- Multiplayer Canvas (Ghost or Peer) -->
+  <canvas id="ghostCanvas" class="hidden" width="400" height="600"></canvas>
+
+  <!-- Audio -->
+  <!-- Audio -->
+  <audio id="bgMusic" src="https://media.vocaroo.com/mp3/128q2QFwU9uQ" autoplay loop></audio>
+  <audio id="crashSound" src="https://www.fesliyanstudios.com/play-mp3/3877"></audio>
+  <audio id="boostSound" src="https://www.fesliyanstudios.com/play-mp3/3878"></audio>
+  <audio id="powerupSound" src="https://www.fesliyanstudios.com/play-mp3/3880"></audio>
+
+  <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+  <script src="script.js"></script>
+</body>
+
+</html>
