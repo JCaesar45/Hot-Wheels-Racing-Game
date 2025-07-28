@@ -1,0 +1,338 @@
+ document.addEventListener("DOMContentLoaded", () => {
+  // --- DOM Elements ---
+  const get = (id) => document.getElementById(id);
+  const titleScreen = get("titleScreen");
+  const playBtn = get("playBtn");
+  const multiplayerBtn = get("multiplayerBtn");
+  const settingsBtn = get("settingsBtn");
+  const settingsScreen = get("settingsScreen");
+  const backToMenuBtn = get("backToMenuBtn");
+  const musicToggle = get("musicToggle");
+  const sfxToggle = get("sfxToggle");
+  const gameContainer = get("gameContainer");
+  const gameCanvas = get("gameCanvas");
+  const ghostCanvas = get("ghostCanvas");
+  const scoreEl = get("score");
+  const highScoreEl = get("highScore");
+  const nitroBar = get("nitroBar");
+  const shieldStatus = get("shieldStatus");
+  const muteToggle = get("muteToggle");
+  const countdownEl = get("countdown");
+  const gameOverScreen = get("gameOver");
+  const finalScoreEl = get("finalScore");
+  const restartBtn = get("restartBtn");
+  const menuBtn = get("menuBtn");
+
+  // --- Audio ---
+  const bgMusic = get("bgMusic");
+  const crashSound = get("crashSound");
+  const boostSound = get("boostSound");
+  const powerupSound = get("powerupSound");
+
+  function playMusic() {
+    if (bgMusic) {
+      bgMusic.volume = 0.5;
+      bgMusic
+        .play()
+        .then(() => console.log("Background music started"))
+        .catch((err) => console.error("Audio play failed:", err));
+    }
+  }
+
+  // --- Canvas contexts ---
+  const ctx = gameCanvas.getContext("2d");
+  const ghostCtx = ghostCanvas.getContext("2d");
+  gameCanvas.width = ghostCanvas.width = 400;
+  gameCanvas.height = ghostCanvas.height = 600;
+
+  // --- Game State ---
+  const lanes = [50, 150, 250, 350];
+  const player = { x: lanes[1], y: 480, width: 50, height: 100 };
+  const powerupTypes = ["shield", "doubleScore", "nitro"];
+
+  let laneIndex = 1;
+  let obstacles = [],
+    powerUps = [],
+    ghostPath = [];
+  let ghostReplayIndex = 0,
+    ghostReplayActive = false;
+  let score = 0,
+    highScore = localStorage.getItem("highscore") || 0;
+  let nitro = 100,
+    shieldActive = false,
+    shieldTimeout;
+  let isBoosting = false,
+    gameSpeed = 5,
+    playing = false,
+    muted = false;
+
+  highScoreEl.textContent = highScore;
+
+  // --- Images ---
+  const loadImg = (src) => {
+    const img = new Image();
+    img.src = src;
+    return img;
+  };
+  const playerImg = loadImg(
+    "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQxo_Am6MmfxCwXR2nR7fs0HQQi-ZV8JB1hRA&s"
+  );
+  const obstacleImg = loadImg(
+    "https://www.cnet.com/a/img/resize/9e85710e0d779a37df8d618a800b875fb23c10c2/hub/2020/09/10/61c9b850-55d6-4fde-8d78-29c3750bc5c0/hot-wheels-the-nash-diecast-toy-car-120.jpg?auto=webp&width=1200"
+  );
+  const powerupImg = loadImg(
+    "https://static.vecteezy.com/system/resources/thumbnails/032/532/112/original/animated-of-the-nitro-tube-icon-free-video.jpg"
+  );
+
+  // --- Drawing Functions ---
+  const drawImageCentered = (img, x, y, w, h) =>
+    ctx.drawImage(img, x - w / 2, y - h / 2, w, h);
+
+  function drawLanes() {
+    ctx.strokeStyle = "#444";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([20, 15]);
+    for (let i = 1; i < lanes.length; i++) {
+      const x = (lanes[i - 1] + lanes[i]) / 2 + player.width / 2;
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, gameCanvas.height);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+  }
+
+  const drawPlayer = () =>
+    drawImageCentered(playerImg, player.x + 25, player.y + 50, 50, 100);
+  const drawObstacle = (ob) =>
+    drawImageCentered(obstacleImg, ob.x + 25, ob.y + 50, 50, 100);
+  const drawPowerUp = (pu) =>
+    drawImageCentered(powerupImg, pu.x + 20, pu.y + 20, 40, 40);
+
+  const checkCollision = (a, b) =>
+    a.x < b.x + b.width &&
+    a.x + a.width > b.x &&
+    a.y < b.y + b.height &&
+    a.y + a.height > b.y;
+
+  function activatePowerUp(type) {
+    console.log("Power-up:", type);
+    switch (type) {
+      case "shield":
+        shieldActive = true;
+        shieldStatus.textContent = "ON";
+        clearTimeout(shieldTimeout);
+        shieldTimeout = setTimeout(() => {
+          shieldActive = false;
+          shieldStatus.textContent = "OFF";
+        }, 5000);
+        break;
+      case "doubleScore":
+        // Future enhancement
+        break;
+      case "nitro":
+        nitro = Math.min(nitro + 50, 100);
+        break;
+    }
+  }
+
+  const spawnObstacle = () =>
+    obstacles.push({
+      x: lanes[Math.floor(Math.random() * 4)],
+      y: -100,
+      width: 50,
+      height: 100
+    });
+  const spawnPowerUp = () =>
+    powerUps.push({
+      x: lanes[Math.floor(Math.random() * 4)],
+      y: -80,
+      width: 40,
+      height: 40,
+      type: powerupTypes[Math.floor(Math.random() * 3)]
+    });
+
+  function drawGhost() {
+    if (!ghostReplayActive) return;
+    ghostCtx.clearRect(0, 0, 400, 600);
+    if (ghostReplayIndex >= ghostPath.length) ghostReplayIndex = 0;
+    const pos = ghostPath[ghostReplayIndex++];
+    ghostCtx.globalAlpha = 0.5;
+    ghostCtx.fillStyle = "cyan";
+    ghostCtx.beginPath();
+    ghostCtx.arc(pos.x + 25, pos.y + 50, 25, 0, Math.PI * 2);
+    ghostCtx.fill();
+    ghostCtx.globalAlpha = 1;
+  }
+
+  function gameOver() {
+    playing = false;
+    if (!muted) crashSound.play();
+    finalScoreEl.textContent = score;
+    if (score > highScore) {
+      highScore = score;
+      localStorage.setItem("highscore", highScore);
+    }
+    highScoreEl.textContent = highScore;
+    gameOverScreen.classList.remove("hidden");
+    bgMusic.pause();
+  }
+
+  function gameLoop() {
+    if (!playing) return;
+    ctx.clearRect(0, 0, 400, 600);
+    drawLanes();
+    score++;
+    scoreEl.textContent = score;
+    if (Math.random() < 0.03) spawnObstacle();
+    if (Math.random() < 0.01) spawnPowerUp();
+
+    obstacles = obstacles.filter((ob) => {
+      ob.y += gameSpeed;
+      drawObstacle(ob);
+      if (checkCollision(player, ob)) {
+        if (shieldActive) {
+          shieldActive = false;
+          shieldStatus.textContent = "OFF";
+        } else {
+          gameOver();
+          return false;
+        }
+      }
+      return ob.y <= 600;
+    });
+
+    powerUps = powerUps.filter((pu) => {
+      pu.y += gameSpeed;
+      drawPowerUp(pu);
+      if (checkCollision(player, pu)) {
+        activatePowerUp(pu.type);
+        if (!muted) powerupSound.play();
+        return false;
+      }
+      return pu.y <= 600;
+    });
+
+    drawPlayer();
+    nitroBar.value = nitro;
+    gameSpeed =
+      isBoosting && nitro > 0
+        ? ((nitro -= 2), 10)
+        : (nitro < 100 && (nitro += 0.5), 5);
+    drawGhost();
+    requestAnimationFrame(gameLoop);
+  }
+
+  function countdown(seconds, cb) {
+    countdownEl.textContent = seconds;
+    countdownEl.style.display = "block";
+    const interval = setInterval(() => {
+      if (--seconds <= 0) {
+        clearInterval(interval);
+        countdownEl.style.display = "none";
+        cb();
+      } else {
+        countdownEl.textContent = seconds;
+      }
+    }, 1000);
+  }
+
+  function startGame() {
+    score = 0;
+    nitro = 100;
+    isBoosting = false;
+    obstacles = [];
+    powerUps = [];
+    ghostPath = [];
+    ghostReplayActive = false;
+    shieldActive = false;
+    shieldStatus.textContent = "OFF";
+    nitroBar.value = nitro;
+    laneIndex = 1;
+    player.x = lanes[laneIndex];
+    scoreEl.textContent = score;
+
+    bgMusic.volume = 0.5;
+    bgMusic.muted = muted;
+    bgMusic.play().catch((err) => console.warn("bgMusic play failed:", err));
+
+    countdown(3, () => {
+      playing = true;
+      gameLoop();
+    });
+  }
+
+  function resetGame() {
+    gameOverScreen.classList.add("hidden");
+    showScreen(gameContainer);
+    startGame();
+  }
+
+  const showScreen = (screen) => {
+    [titleScreen, settingsScreen, gameContainer].forEach((s) =>
+      s.classList.add("hidden")
+    );
+    screen.classList.remove("hidden");
+    gameOverScreen.classList.add("hidden");
+  };
+
+  // --- Event Listeners ---
+  playBtn.addEventListener(
+    "click",
+    () => showScreen(gameContainer) || startGame()
+  );
+  multiplayerBtn.addEventListener("click", () =>
+    alert("Multiplayer feature coming soon!")
+  );
+  settingsBtn.addEventListener("click", () => showScreen(settingsScreen));
+  backToMenuBtn.addEventListener("click", () => showScreen(titleScreen));
+  restartBtn.addEventListener(
+    "click",
+    (e) => e.preventDefault() || resetGame()
+  );
+  menuBtn.addEventListener("click", () => {
+    playing = false;
+    bgMusic.pause();
+    showScreen(titleScreen);
+  });
+  musicToggle.addEventListener(
+    "change",
+    (e) => (bgMusic.muted = !e.target.checked)
+  );
+  sfxToggle.addEventListener("change", (e) => (muted = !e.target.checked));
+
+  window.addEventListener("keydown", (e) => {
+    if (!playing) return;
+    if (e.code === "ArrowLeft" && laneIndex > 0) laneIndex--;
+    if (e.code === "ArrowRight" && laneIndex < lanes.length - 1) laneIndex++;
+    if (e.code === "Space" && nitro >= 20) {
+      if (!muted) boostSound.play();
+      isBoosting = true;
+    }
+    player.x = lanes[laneIndex];
+  });
+
+  window.addEventListener(
+    "keyup",
+    (e) => e.code === "Space" && (isBoosting = false)
+  );
+
+  let touchStartX = null;
+  window.addEventListener(
+    "touchstart",
+    (e) => (touchStartX = e.changedTouches[0].screenX)
+  );
+  window.addEventListener("touchend", (e) => {
+    if (!playing) return;
+    const endX = e.changedTouches[0].screenX;
+    if (endX < touchStartX - 30 && laneIndex > 0) laneIndex--;
+    if (endX > touchStartX + 30 && laneIndex < lanes.length - 1) laneIndex++;
+    player.x = lanes[laneIndex];
+  });
+
+  muteToggle.addEventListener("click", () => {
+    muted = !muted;
+    bgMusic.muted = muted;
+    muteToggle.textContent = muted ? "🔇" : "🔊";
+  });
+});
